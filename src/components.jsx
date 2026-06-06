@@ -6,11 +6,6 @@ import { ADMIN } from './data.jsx';
 // Shared admin components: layout shell, cards, tables, badges, etc.
 
 
-
-// =============================================================
-// UTILITY HOOKS
-// =============================================================
-
 // Count-up: animates a number from 0 → target on mount.
 export function useCountUp(target, duration = 1100) {
   const [val, setVal] = useState(0);
