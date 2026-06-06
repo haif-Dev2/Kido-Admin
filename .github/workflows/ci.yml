@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # manual trigger from the Actions tab
+
+# Cancel in-progress runs for the same branch when a new commit lands —
+# we don't waste minutes on superseded code.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: Test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build (production)
+        run: npm run build
+        env:
+          # Placeholders so `import.meta.env` reads work at build time.
+          # Real values come from Vercel env vars at deploy time.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'placeholder' }}
+
+      - name: Verify demo-bypass tree-shaken from production
+        # Critical security gate: if the demo admin button ever leaks into
+        # the prod bundle, fail the build immediately.
+        run: |
+          if grep -q "Preview as demo admin" dist/assets/*.js; then
+            echo "::error::Demo admin bypass found in production bundle!"
+            exit 1
+          fi
+          echo "✓ Demo bypass tree-shaken out of production"
+
+      - name: Report bundle sizes
+        run: |
+          echo "## Bundle sizes" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          du -h dist/assets/*.js dist/assets/*.css 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
